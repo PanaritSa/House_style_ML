@@ -87,7 +87,7 @@ def initialize_recommendation_model():
     return tensorflow.keras.Sequential([base_model, GlobalMaxPooling2D()])
 
 def load_image_data():
-    dir = r'D:\Real Estate\_PLP-ML-AI\House_data\dataset'
+    dir = r'D:\Real Estate\House_Style_Project\House_style_ML\dataset'
     datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
     data_set = datagen.flow_from_directory(dir, target_size=(224, 224), batch_size=32, class_mode='sparse')
     ids, counts = np.unique(data_set.classes, return_counts=True)
