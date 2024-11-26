@@ -70,7 +70,7 @@ from sklearn.neighbors import NearestNeighbors
 from numpy.linalg import norm
 import numpy as np
 import os
-import cv2
+import cv2 
 from PIL import Image
 import pickle
 import tensorflow
