@@ -33,7 +33,7 @@
 
 # if uploaded_file is not None:
 #     # Display the uploaded image
-#     st.image(uploaded_file, caption='Uploaded Image', use_column_width=True)
+#     st.image(uploaded_file, caption='Uploaded Image', use_column_wipython dth=True)
 #     st.write("")
 #     st.write("Classifying...")
 
