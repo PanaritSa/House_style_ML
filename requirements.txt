@@ -1,8 +1,8 @@
 
 streamlit
 tensorflow
-numpy == 1.26.4
-opencv-python == 4.5.5.62
-opencv-python-headless == 4.10.0.84
+numpy==1.26.4
+opencv-python==4.5.5.62
+opencv-python-headless==4.10.0.84
 pillow
 scikit-learn
