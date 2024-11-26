@@ -3,7 +3,7 @@ colorama==0.4.6
 ConfigParser==7.1.0
 cryptography==42.0.5
 # docutils==0.18.1
-docutils==0.18.1
+docutils==0.20
 filelock==3.16.1
 HTMLParser==0.0.2
 ipython==8.25.0
