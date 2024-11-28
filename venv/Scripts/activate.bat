@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\Toto\Documents\_PLP\House\House_style_ML\venv
+set VIRTUAL_ENV=D:\Real Estate\House_Style_Project\House_style_ML\venv
 
 if not defined PROMPT set PROMPT=$P$G
 
