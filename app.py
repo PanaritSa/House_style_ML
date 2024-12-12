@@ -127,9 +127,8 @@ if selected_class and selected_class != "Select House Style":
 
 # Image Input
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-camera_file = st.camera_input("Take a picture or upload an image", key="camera_input")
 
-if uploaded_file is not None:
+if uploaded_file is not None:  # Process uploaded image
     # Handle image input
     st.image(uploaded_file, caption='Uploaded Image', use_container_width=True)
     st.write("")
