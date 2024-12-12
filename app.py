@@ -36,7 +36,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Top layout with image and text
+# Top layout with image
 st.image("H_vector.jpg", width=800)
 
 # Main content inside styled div
@@ -125,19 +125,23 @@ if selected_class and selected_class != "Select House Style":
     else:
         st.write("No images found for this style.")
 
-# Image Input
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-camera_file = st.camera_input("Take a picture")
+# Input Method Toggle
+input_method = st.radio("Select Input Method:", ("Upload Image", "Use Camera"))
 
 # Determine the source of the image
-image_source = uploaded_file if uploaded_file else camera_file
+if input_method == "Upload Image":
+    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+    image_source = uploaded_file
+else:
+    camera_file = st.camera_input("Take a picture")
+    image_source = camera_file
 
 if image_source is not None:
     # Handle image input
-    if uploaded_file:
-        image_bytes = uploaded_file.read()
+    if input_method == "Upload Image":
+        image_bytes = image_source.read()
     else:  # Camera input
-        image_bytes = camera_file.getvalue()
+        image_bytes = image_source.getvalue()
 
     st.image(image_bytes, caption='Input Image', use_container_width=True)
 
@@ -178,16 +182,6 @@ if image_source is not None:
     # Part 2: Image Recommendation
     st.write("Finding similar images...")
 
-    def save_uploaded_file(uploaded_file):
-        if not os.path.exists('uploads'):
-            os.makedirs('uploads')
-        file_path = os.path.join('uploads', uploaded_file.name)
-        with open(file_path, 'wb') as f:
-            f.write(uploaded_file.getbuffer())
-        return file_path
-
-    file_path = "temp_image.jpg"
-
     def extract_feature(img_path, model):
         img = cv2.imread(img_path)
         if img is None:
@@ -200,7 +194,7 @@ if image_source is not None:
         normalized = result / norm(result)
         return normalized
 
-    features = extract_feature(file_path, model_recommendation)
+    features = extract_feature("temp_image.jpg", model_recommendation)
     if features is not None:
         def recommend(features, feature_list):
             neighbors = NearestNeighbors(n_neighbors=6, algorithm='brute', metric='euclidean')
