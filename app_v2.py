@@ -127,6 +127,7 @@ if selected_class and selected_class != "Select House Style":
 
 # Image Input
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+camera_file = st.camera_input("Take a picture or upload an image", key="camera_input")
 
 if uploaded_file is not None:
     # Handle image input
