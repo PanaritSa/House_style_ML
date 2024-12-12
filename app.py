@@ -37,16 +37,7 @@ st.markdown(
 )
 
 # Top layout with image and text
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.image("PLP_PNG.png", width=75)
-
-with col2:
-    st.markdown(
-        "<h1>PEOPLE LIFE PLACE</h1>",
-        unsafe_allow_html=True
-    )
+st.image("H_vector.jpg", width=800)
 
 # Main content inside styled div
 st.markdown('<div class="main">', unsafe_allow_html=True)
