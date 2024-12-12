@@ -127,22 +127,34 @@ if selected_class and selected_class != "Select House Style":
 
 # Image Input
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+camera_file = st.camera_input("Take a picture")
 
-if uploaded_file is not None:  # Process uploaded image
+# Determine the source of the image
+image_source = uploaded_file if uploaded_file else camera_file
+
+if image_source is not None:
     # Handle image input
-    st.image(uploaded_file, caption='Uploaded Image', use_container_width=True)
-    st.write("")
+    if uploaded_file:
+        image_bytes = uploaded_file.read()
+    else:  # Camera input
+        image_bytes = camera_file.getvalue()
 
-    # Part 1: Image Classification
+    st.image(image_bytes, caption='Input Image', use_container_width=True)
+
+    # Save the image temporarily for processing
+    with open("temp_image.jpg", "wb") as f:
+        f.write(image_bytes)
+
+    # Load and process the image for classification
     st.write("Classifying the image...")
-    img = load_img(uploaded_file, target_size=(224, 224))
+    img = load_img("temp_image.jpg", target_size=(224, 224))
     img_array = img_to_array(img)
     img_array = np.expand_dims(img_array, axis=0)
     img_array = preprocess_input(img_array)
     pred = model_classification.predict(img_array)
     pred_probabilities = pred[0]
     top_indices = pred_probabilities.argsort()[-3:][::-1]
-    top_labels = [(labels[i], pred_probabilities[i]) for i in top_indices]
+    top_labels = [(labels[i].replace('ML-AR-', ''), pred_probabilities[i]) for i in top_indices]
 
     # Horizontal Bar Chart for Top Predictions
     st.write("Prediction Scores:")
@@ -174,7 +186,7 @@ if uploaded_file is not None:  # Process uploaded image
             f.write(uploaded_file.getbuffer())
         return file_path
 
-    file_path = save_uploaded_file(uploaded_file)
+    file_path = "temp_image.jpg"
 
     def extract_feature(img_path, model):
         img = cv2.imread(img_path)
