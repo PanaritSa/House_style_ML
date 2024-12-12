@@ -14,7 +14,7 @@ from PIL import Image
 import pickle
 import tensorflow
 
-# Add CSS for gray background
+# Add CSS for layout adjustments
 st.markdown(
     """
     <style>
@@ -26,10 +26,27 @@ st.markdown(
     .stApp {
         background-color: #d3d3d3;
     }
+    h1 {
+        font-family: Arial, sans-serif;
+        color: #333;
+        margin-left: 20px;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+# Top layout with image and text
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    st.image("PLP_PNG.png", use_column_width=True)
+
+with col2:
+    st.markdown(
+        "<h1>PEOPLE LIFE PLACE</h1>",
+        unsafe_allow_html=True
+    )
 
 # Main content inside styled div
 st.markdown('<div class="main">', unsafe_allow_html=True)
@@ -61,17 +78,68 @@ def load_feature_data():
         st.stop()
 
 st.title("Image Classification and Recommendation System")
-st.write("Upload an image to classify it and receive similar image recommendations.")
+st.write("Upload an image to classify it, or select a house style from the dropdown to view related houses.")
 
+# Load models and data
+model_classification = initialize_classification_model()
+model_recommendation = initialize_recommendation_model()
+labels = load_image_data()
+feature_list, filenames = load_feature_data()
+
+# Dropdown list for house styles
+house_styles = ["Select House Style"] + [value.replace('ML-AR-', '') for value in labels.values()]
+selected_class = st.selectbox("Select a house style:", options=house_styles)
+
+if selected_class != "Select House Style":
+    st.write(f"Displaying houses for style: {selected_class}")
+    matched_files = [file for file in filenames if selected_class.lower() in file.lower()]
+
+    if matched_files:
+        # Pagination logic
+        page = st.number_input("Page", min_value=1, max_value=(len(matched_files) - 1) // 5 + 1, step=1, value=1)
+        start = (page - 1) * 5
+        end = start + 5
+
+        for file in matched_files[start:end]:
+            st.image(file, caption=os.path.basename(file), use_container_width=True)
+            if st.button(f"Analyze {os.path.basename(file)}"):
+                # Perform analysis on the selected image
+                img = cv2.imread(file)
+                img = cv2.resize(img, (224, 224))
+                img_array = np.expand_dims(img, axis=0)
+                img_array = preprocess_input(img_array)
+                pred = model_classification.predict(img_array)
+                pred_probabilities = pred[0]
+                top_indices = pred_probabilities.argsort()[-3:][::-1]
+                top_labels = [(labels[i].replace('ML-AR-', ''), pred_probabilities[i]) for i in top_indices]
+
+                # Display barchart for analysis
+                st.write("Prediction Scores:")
+                sorted_top_labels = sorted(top_labels, key=lambda x: x[1], reverse=True)
+                chart_labels = [label for label, _ in sorted_top_labels]
+                chart_scores = [score * 100 for _, score in sorted_top_labels]
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+                bars = ax.barh(chart_labels, chart_scores, color='skyblue', height=0.4)
+
+                for bar, score in zip(bars, chart_scores):
+                    ax.text(score + 1, bar.get_y() + bar.get_height()/2, f'{score:.2f}%', va='center')
+
+                ax.set_title("Top 3 Predictions")
+                ax.set_xlabel("Score (%)")
+                ax.set_xlim(0, 100)
+                ax.grid(axis='x', linestyle='--', alpha=0.7)
+                ax.invert_yaxis()
+                st.pyplot(fig)
+    else:
+        st.write("No images found for this style.")
+
+# Image Input
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    model_classification = initialize_classification_model()
-    model_recommendation = initialize_recommendation_model()
-    labels = load_image_data()
-    feature_list, filenames = load_feature_data()
-
-    st.image(uploaded_file, caption='Uploaded Image', use_column_width=True)
+    # Handle image input
+    st.image(uploaded_file, caption='Uploaded Image', use_container_width=True)
     st.write("")
 
     # Part 1: Image Classification
@@ -84,10 +152,6 @@ if uploaded_file is not None:
     pred_probabilities = pred[0]
     top_indices = pred_probabilities.argsort()[-3:][::-1]
     top_labels = [(labels[i], pred_probabilities[i]) for i in top_indices]
-
-    # st.write("Top 3 Predictions:")
-    # for label, probability in top_labels:
-    #     st.write(f"{label}: {probability * 100:.2f}%")
 
     # Horizontal Bar Chart for Top Predictions
     st.write("Prediction Scores:")
@@ -151,7 +215,7 @@ if uploaded_file is not None:
                     if image_path:
                         folder_name = os.path.basename(os.path.dirname(image_path))
                         with col:
-                            st.image(image_path, caption=folder_name)
+                            st.image(image_path, caption=folder_name, use_container_width=True)
                     else:
                         st.write("Error: Invalid image path.")
                 except IndexError:
