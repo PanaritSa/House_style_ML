@@ -10,8 +10,9 @@ from numpy.linalg import norm
 import numpy as np
 import os
 import cv2
-from PIL import Image
+from PIL import Image as PILImage
 import pickle
+import io
 import tensorflow
 
 # Add CSS for layout adjustments
@@ -141,7 +142,13 @@ if image_source is not None:
     if input_method == "Upload Image":
         image_bytes = image_source.read()
     else:  # Camera input
+        # Rotate the camera input by 90 degrees
         image_bytes = image_source.getvalue()
+        image_pil = PILImage.open(io.BytesIO(image_bytes))
+        rotated_image = image_pil.rotate(90, expand=True)
+        image_buffer = io.BytesIO()
+        rotated_image.save(image_buffer, format="JPEG")
+        image_bytes = image_buffer.getvalue()
 
     st.image(image_bytes, caption='Input Image', use_container_width=True)
 
