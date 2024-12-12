@@ -36,3 +36,4 @@ opencv_python_headless
 numpy
 scikit-learn
 Pillow
+matplotlib
