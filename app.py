@@ -40,7 +40,7 @@ st.markdown(
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.image("PLP_PNG.png", use_container_width=True)
+    st.image("PLP_PNG.png", width=75)
 
 with col2:
     st.markdown(
@@ -90,7 +90,7 @@ feature_list, filenames = load_feature_data()
 house_styles = ["Select House Style"] + [value.replace('ML-AR-', '') for value in labels.values()]
 selected_class = st.selectbox("Select a house style:", options=house_styles)
 
-if selected_class != "Select House Style":
+if selected_class and selected_class != "Select House Style":
     st.write(f"Displaying houses for style: {selected_class}")
     matched_files = [file for file in filenames if selected_class.lower() in file.lower()]
 
