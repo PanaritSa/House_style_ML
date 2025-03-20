@@ -37,6 +37,5 @@ numpy
 scikit-learn
 Pillow
 matplotlib
-sqlite3
 pandas
 pydeck
