@@ -1,4 +1,4 @@
-# app_v5.py
+
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -17,11 +17,9 @@ db_name = "house_database.db"
 model_classification = load_model("best_model13cls.keras")
 base_model = ResNet50(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
 base_model.trainable = False
-model_recommendation = np.array([base_model, GlobalMaxPooling2D()])
+pooling_layer = GlobalMaxPooling2D()
 feature_list = np.array(pickle.load(open("featurevector.pkl", "rb")))
 filenames = pickle.load(open("filenames.pkl", "rb"))
-
-# Normalize filenames
 filenames = [os.path.normpath(f).replace("\\", "/") for f in filenames]
 
 # === Load Database ===
@@ -96,13 +94,7 @@ def paginate_results(df, page_key):
             st.rerun()
     return df.iloc[start_idx:end_idx]
 
-# === Back Button ===
-def back_step():
-    st.session_state.page = st.session_state.return_page
-    st.session_state.selected_house = None
-    st.rerun()
-
-# === Recommendation System ===
+# === Recommendation Functions ===
 def get_recommendations(image_path):
     image_path = os.path.normpath(image_path).replace("\\", "/")
     try:
@@ -114,7 +106,23 @@ def get_recommendations(image_path):
     indices = np.argsort(similarities)[-6:-1][::-1]
     return [filenames[i] for i in indices]
 
-# === Show House Details ===
+def get_similar_images_from_upload(uploaded_file):
+    image = load_img(uploaded_file, target_size=(224, 224))
+    img_array = img_to_array(image)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = preprocess_input(img_array)
+    feature_map = base_model.predict(img_array)
+    features = pooling_layer(feature_map).numpy()
+    similarities = cosine_similarity(feature_list, features).flatten()
+    indices = np.argsort(similarities)[-20:][::-1]
+    return [filenames[i] for i in indices]
+
+# === Back and Detail View ===
+def back_step():
+    st.session_state.page = st.session_state.return_page
+    st.session_state.selected_house = None
+    st.rerun()
+
 def show_house_details(row):
     st.image(row["image_path"], caption=row["style"], width=500)
     st.write(f"**Address:** {row['address']}")
@@ -131,22 +139,16 @@ def show_house_details(row):
             layers=[pdk.Layer("ScatterplotLayer", data=[{"lat": lat, "lon": lon}],
                               get_position="[lon, lat]", get_color="[255, 0, 0, 160]", get_radius=100)]
         ))
-
-    st.markdown("---")
     st.subheader("🏘 Similar Houses You May Like")
     similar_paths = get_recommendations(row["image_path"])
-    if not similar_paths:
-        st.warning("⚠️ ไม่พบภาพในฐานข้อมูล vector หรือชื่อไฟล์ไม่ตรงกัน")
-    else:
-        sim_df = df[df["image_path"].isin(similar_paths)]
-        for _, sim_row in sim_df.iterrows():
-            st.image(sim_row["image_path"], width=250, caption=sim_row["style"])
-            st.caption(f"{sim_row['address']} — {sim_row['price']} THB")
-
+    sim_df = df[df["image_path"].isin(similar_paths)]
+    for _, sim_row in sim_df.iterrows():
+        st.image(sim_row["image_path"], width=250, caption=sim_row["style"])
+        st.caption(f"{sim_row['address']} — {sim_row['price']} THB")
     if st.button("🔙 Back"):
         back_step()
 
-# === Menu ===
+# === Menu Navigation ===
 menu = st.radio("📌 Menu", ["Home", "Classify", "Filter", "Style"], horizontal=True)
 if menu != st.session_state.page:
     st.session_state.previous_page = st.session_state.page
@@ -171,13 +173,21 @@ elif st.session_state.page == "Classify":
         style_labels = df["style"].unique()
         top_idx = np.argsort(pred)[-3:][::-1]
         top_styles = [(style_labels[i], pred[i] * 100) for i in top_idx]
-
         st.image(uploaded_file, width=300)
         st.subheader("🎯 Top 3 Predicted Styles")
         for s, score in top_styles:
             st.write(f"✅ {s}: {score:.2f}%")
             st.session_state.classify_results[s] = df[df["style"] == s]
-
+        similar_image_paths = get_similar_images_from_upload(uploaded_file)
+        sim_df = df[df["image_path"].isin(similar_image_paths)]
+        st.write("## 🏘 Top 20 Similar Houses Based on Uploaded Image")
+        paginated = paginate_results(sim_df, page_key="upload_similar")
+        for i, (_, row) in enumerate(paginated.iterrows()):
+            st.image(row["image_path"], caption=row["style"], width=300)
+            if st.button(f"View Details: {row['address']}", key=f"upload_similar_{i}"):
+                st.session_state.selected_house = row.to_dict()
+                st.session_state.return_page = "Classify"
+                st.rerun()
     for s, style_df in st.session_state.classify_results.items():
         if not style_df.empty:
             st.write(f"### 🏡 Houses in style: {s}")
@@ -197,12 +207,9 @@ elif st.session_state.page == "Filter":
     with col2:
         max_price = st.number_input("Max Price", 100000000)
     location_input = st.text_input("Location (e.g., Sukhumvit, Pattaya)")
-
     all_tags = sorted(set(tag.strip() for tags in df["facilities"].dropna().str.split(",") for tag in tags))
     selected_tags = st.multiselect("🏷 Tags (Facilities)", options=all_tags)
-
     st.map(df[["latitude", "longitude"]].dropna(), zoom=6)
-
     if st.button("Search", key="filter_button"):
         results = df[
             (df["price"].astype(float) >= min_price) &
@@ -219,7 +226,6 @@ elif st.session_state.page == "Filter":
         st.session_state.search_results = results.to_dict(orient="records")
         st.session_state.previous_page = "Filter"
         st.rerun()
-
     if st.session_state.search_results:
         results_df = pd.DataFrame(st.session_state.search_results)
         st.write(f"### Found {len(results_df)} results:")
@@ -237,7 +243,6 @@ elif st.session_state.page == "Style":
     selected_style = st.selectbox("Select a style:", styles)
     if selected_style != "Select":
         st.session_state.style_results = df[df["style"] == selected_style].to_dict(orient="records")
-
     if st.session_state.style_results:
         style_df = pd.DataFrame(st.session_state.style_results)
         paginated = paginate_results(style_df, page_key="style_page")
