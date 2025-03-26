@@ -1,4 +1,3 @@
-
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -6,9 +5,10 @@ import numpy as np
 import pydeck as pdk
 import pickle
 import os
+from PIL import Image, ImageOps, ExifTags
 from sklearn.metrics.pairwise import cosine_similarity
 from tensorflow.keras.applications.resnet50 import preprocess_input, ResNet50
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import GlobalMaxPooling2D
 
@@ -75,24 +75,50 @@ def paginate_results(df, page_key):
     st.markdown(f"**Showing {start_idx + 1}–{end_idx} of {total_items} houses**")
     col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
     with col1:
-        if st.button("🏠 First", key=f"{page_key}_first"):
+        if st.button("\U0001F3E0 First", key=f"{page_key}_first"):
             st.session_state[page_number_key] = 1
             st.rerun()
     with col2:
-        if st.button("⬅️ Prev", key=f"{page_key}_prev") and current_page > 1:
+        if st.button("\u2B05\uFE0F Prev", key=f"{page_key}_prev") and current_page > 1:
             st.session_state[page_number_key] -= 1
             st.rerun()
     with col3:
         st.markdown(f"<div style='text-align: center; font-weight: bold;'>Page {current_page} of {total_pages}</div>", unsafe_allow_html=True)
     with col4:
-        if st.button("➡️ Next", key=f"{page_key}_next") and current_page < total_pages:
+        if st.button("\u27A1\uFE0F Next", key=f"{page_key}_next") and current_page < total_pages:
             st.session_state[page_number_key] += 1
             st.rerun()
     with col5:
-        if st.button("🔚 Last", key=f"{page_key}_last"):
+        if st.button("\U0001F51A Last", key=f"{page_key}_last"):
             st.session_state[page_number_key] = total_pages
             st.rerun()
     return df.iloc[start_idx:end_idx]
+
+# === Image Utilities ===
+def correct_orientation(img):
+    try:
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = img._getexif()
+        if exif is not None:
+            orientation_value = exif.get(orientation, None)
+            if orientation_value == 3:
+                img = img.rotate(180, expand=True)
+            elif orientation_value == 6:
+                img = img.rotate(270, expand=True)
+            elif orientation_value == 8:
+                img = img.rotate(90, expand=True)
+    except Exception:
+        pass
+    return img
+
+def pad_to_square(img):
+    desired_size = max(img.size)
+    delta_w = desired_size - img.size[0]
+    delta_h = desired_size - img.size[1]
+    padding = (delta_w // 2, delta_h // 2, delta_w - delta_w // 2, delta_h - delta_h // 2)
+    return ImageOps.expand(img, padding, fill='white')
 
 # === Recommendation Functions ===
 def get_recommendations(image_path):
@@ -106,8 +132,8 @@ def get_recommendations(image_path):
     indices = np.argsort(similarities)[-6:-1][::-1]
     return [filenames[i] for i in indices]
 
-def get_similar_images_from_upload(uploaded_file):
-    image = load_img(uploaded_file, target_size=(224, 224))
+def get_similar_images_from_upload(pil_image):
+    image = pil_image.resize((224, 224))
     img_array = img_to_array(image)
     img_array = np.expand_dims(img_array, axis=0)
     img_array = preprocess_input(img_array)
@@ -139,17 +165,17 @@ def show_house_details(row):
             layers=[pdk.Layer("ScatterplotLayer", data=[{"lat": lat, "lon": lon}],
                               get_position="[lon, lat]", get_color="[255, 0, 0, 160]", get_radius=100)]
         ))
-    st.subheader("🏘 Similar Houses You May Like")
+    st.subheader("\U0001F3D8 Similar Houses You May Like")
     similar_paths = get_recommendations(row["image_path"])
     sim_df = df[df["image_path"].isin(similar_paths)]
     for _, sim_row in sim_df.iterrows():
         st.image(sim_row["image_path"], width=250, caption=sim_row["style"])
         st.caption(f"{sim_row['address']} — {sim_row['price']} THB")
-    if st.button("🔙 Back"):
+    if st.button("\U0001F519 Back"):
         back_step()
 
 # === Menu Navigation ===
-menu = st.radio("📌 Menu", ["Home", "Classify", "Filter", "Style"], horizontal=True)
+menu = st.radio("\U0001F4CC Menu", ["Home", "Classify", "Filter", "Style"], horizontal=True)
 if menu != st.session_state.page:
     st.session_state.previous_page = st.session_state.page
     st.session_state.page = menu
@@ -162,25 +188,31 @@ elif st.session_state.page == "Home":
     st.write("Welcome to the House Finder App V5!")
 
 elif st.session_state.page == "Classify":
-    st.subheader("📷 Upload an Image for Classification")
+    st.subheader("\U0001F4F7 Upload an Image for Classification")
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     if uploaded_file:
-        image = load_img(uploaded_file, target_size=(224, 224))
+        image = Image.open(uploaded_file)
+        image = correct_orientation(image)
+        image = pad_to_square(image).resize((224, 224))
+
         img_array = img_to_array(image)
         img_array = np.expand_dims(img_array, axis=0)
         img_array = preprocess_input(img_array)
         pred = model_classification.predict(img_array)[0]
+
         style_labels = df["style"].unique()
         top_idx = np.argsort(pred)[-3:][::-1]
         top_styles = [(style_labels[i], pred[i] * 100) for i in top_idx]
-        st.image(uploaded_file, width=300)
-        st.subheader("🎯 Top 3 Predicted Styles")
+
+        st.image(image, width=300)
+        st.subheader("\U0001F3AF Top 3 Predicted Styles")
         for s, score in top_styles:
             st.write(f"✅ {s}: {score:.2f}%")
             st.session_state.classify_results[s] = df[df["style"] == s]
-        similar_image_paths = get_similar_images_from_upload(uploaded_file)
+
+        similar_image_paths = get_similar_images_from_upload(image)
         sim_df = df[df["image_path"].isin(similar_image_paths)]
-        st.write("## 🏘 Top 20 Similar Houses Based on Uploaded Image")
+        st.write("## \U0001F3D8 Top 20 Similar Houses Based on Uploaded Image")
         paginated = paginate_results(sim_df, page_key="upload_similar")
         for i, (_, row) in enumerate(paginated.iterrows()):
             st.image(row["image_path"], caption=row["style"], width=300)
@@ -190,7 +222,7 @@ elif st.session_state.page == "Classify":
                 st.rerun()
     for s, style_df in st.session_state.classify_results.items():
         if not style_df.empty:
-            st.write(f"### 🏡 Houses in style: {s}")
+            st.write(f"### \U0001F3E1 Houses in style: {s}")
             paginated = paginate_results(style_df, page_key=f"classify_page_{s}")
             for i, (_, row) in enumerate(paginated.iterrows()):
                 st.image(row["image_path"], caption=row["style"], width=300)
@@ -200,7 +232,7 @@ elif st.session_state.page == "Classify":
                     st.rerun()
 
 elif st.session_state.page == "Filter":
-    st.subheader("🔍 Search by Filter + Map + Tags")
+    st.subheader("\U0001F50D Search by Filter + Map + Tags")
     col1, col2 = st.columns(2)
     with col1:
         min_price = st.number_input("Min Price", 0)
@@ -208,7 +240,7 @@ elif st.session_state.page == "Filter":
         max_price = st.number_input("Max Price", 100000000)
     location_input = st.text_input("Location (e.g., Sukhumvit, Pattaya)")
     all_tags = sorted(set(tag.strip() for tags in df["facilities"].dropna().str.split(",") for tag in tags))
-    selected_tags = st.multiselect("🏷 Tags (Facilities)", options=all_tags)
+    selected_tags = st.multiselect("\U0001F3F7 Tags (Facilities)", options=all_tags)
     st.map(df[["latitude", "longitude"]].dropna(), zoom=6)
     if st.button("Search", key="filter_button"):
         results = df[
@@ -238,7 +270,7 @@ elif st.session_state.page == "Filter":
                 st.rerun()
 
 elif st.session_state.page == "Style":
-    st.subheader("🎨 Browse by House Style")
+    st.subheader("\U0001F3A8 Browse by House Style")
     styles = ["Select"] + sorted(df["style"].unique())
     selected_style = st.selectbox("Select a style:", styles)
     if selected_style != "Select":
