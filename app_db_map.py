@@ -1,3 +1,5 @@
+# House Finder V5 - Full Streamlit App with All Features
+
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -159,36 +161,84 @@ def show_house_details(row):
     st.write(f"**Nearby Places:** {row['magnet']}")
     lat, lon = row.get("latitude"), row.get("longitude")
     if lat and lon:
+        icon_data = [{
+            "position": [lon, lat],
+            "icon": {
+                "url": "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+                "width": 128,
+                "height": 128,
+                "anchorY": 128
+            }
+        }]
         st.pydeck_chart(pdk.Deck(
             map_style="mapbox://styles/mapbox/streets-v11",
             initial_view_state=pdk.ViewState(latitude=lat, longitude=lon, zoom=15),
-            layers=[pdk.Layer("ScatterplotLayer", data=[{"lat": lat, "lon": lon}],
-                              get_position="[lon, lat]", get_color="[255, 0, 0, 160]", get_radius=100)]
+            layers=[
+                pdk.Layer(
+                    "IconLayer",
+                    data=icon_data,
+                    get_icon="icon",
+                    get_position="position",
+                    size_scale=15,
+                    pickable=True
+                )
+            ]
         ))
-    st.subheader("\U0001F3D8 Similar Houses You May Like")
+    st.subheader("\U0001F3D8 Similar Houses You May Like (Ranked)")
     similar_paths = get_recommendations(row["image_path"])
-    sim_df = df[df["image_path"].isin(similar_paths)]
-    for _, sim_row in sim_df.iterrows():
-        st.image(sim_row["image_path"], width=250, caption=sim_row["style"])
+    sim_df = df[df["image_path"].isin(similar_paths)].copy()
+    sim_df["similarity"] = sim_df["image_path"].apply(
+        lambda path: cosine_similarity(
+            feature_list[filenames.index(path)].reshape(1, -1),
+            feature_list[filenames.index(row["image_path"])].reshape(1, -1)
+        )[0][0] if path in filenames else 0
+    )
+    sim_df = sim_df.sort_values(by="similarity", ascending=False)
+    for i, (_, sim_row) in enumerate(sim_df.iterrows()):
+        st.image(sim_row["image_path"], width=250, caption=f"{sim_row['style']} ({sim_row['similarity']:.2f})")
         st.caption(f"{sim_row['address']} — {sim_row['price']} THB")
+        if st.button(f"View Details: {sim_row['address']}", key=f"similar_result_{i}"):
+            st.session_state.selected_house = sim_row.to_dict()
+            st.session_state.return_page = st.session_state.page
+            st.rerun()
     if st.button("\U0001F519 Back"):
         back_step()
 
 # === Menu Navigation ===
-menu = st.radio("\U0001F4CC Menu", ["Home", "Classify", "Filter", "Style"], horizontal=True)
+menu = st.selectbox("📌 Menu Navigation", ["Home", "Classify", "Filter", "Style"],
+                    index=["Home", "Classify", "Filter", "Style"].index(st.session_state.page),
+                    key="menu_selector")
+
 if menu != st.session_state.page:
+    # รีเซตสถานะที่เกี่ยวข้องกับผลลัพธ์การค้นหาทุกครั้งที่เปลี่ยนวิธี
     st.session_state.previous_page = st.session_state.page
     st.session_state.page = menu
 
+    # Clear previous search results when switching methods
+    st.session_state.search_results = None
+    st.session_state.style_results = None
+    st.session_state.classify_results = {}
+    st.session_state.selected_house = None
+
+    st.rerun()
+
 # === Routing ===
+def home_button():
+    if st.button("🏠 Go to Home"):
+        st.session_state.page = "Home"
+        st.session_state.selected_house = None
+        st.rerun()
+
 if st.session_state.selected_house:
+    home_button()
     show_house_details(st.session_state.selected_house)
 
 elif st.session_state.page == "Home":
     st.write("Welcome to the House Finder App V5!")
 
 elif st.session_state.page == "Classify":
-    st.subheader("\U0001F4F7 Upload an Image for Classification")
+    home_button()
+    st.subheader("📷 Upload an Image for Classification")
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
     if uploaded_file:
         image = Image.open(uploaded_file)
@@ -205,14 +255,14 @@ elif st.session_state.page == "Classify":
         top_styles = [(style_labels[i], pred[i] * 100) for i in top_idx]
 
         st.image(image, width=300)
-        st.subheader("\U0001F3AF Top 3 Predicted Styles")
+        st.subheader("🎨 Top 3 Predicted Styles")
         for s, score in top_styles:
             st.write(f"✅ {s}: {score:.2f}%")
             st.session_state.classify_results[s] = df[df["style"] == s]
 
         similar_image_paths = get_similar_images_from_upload(image)
         sim_df = df[df["image_path"].isin(similar_image_paths)]
-        st.write("## \U0001F3D8 Top 20 Similar Houses Based on Uploaded Image")
+        st.write("## 🏡 Top 20 Similar Houses Based on Uploaded Image")
         paginated = paginate_results(sim_df, page_key="upload_similar")
         for i, (_, row) in enumerate(paginated.iterrows()):
             st.image(row["image_path"], caption=row["style"], width=300)
@@ -220,9 +270,10 @@ elif st.session_state.page == "Classify":
                 st.session_state.selected_house = row.to_dict()
                 st.session_state.return_page = "Classify"
                 st.rerun()
+
     for s, style_df in st.session_state.classify_results.items():
         if not style_df.empty:
-            st.write(f"### \U0001F3E1 Houses in style: {s}")
+            st.write(f"### 🏘 Houses in style: {s}")
             paginated = paginate_results(style_df, page_key=f"classify_page_{s}")
             for i, (_, row) in enumerate(paginated.iterrows()):
                 st.image(row["image_path"], caption=row["style"], width=300)
@@ -232,16 +283,27 @@ elif st.session_state.page == "Classify":
                     st.rerun()
 
 elif st.session_state.page == "Filter":
-    st.subheader("\U0001F50D Search by Filter + Map + Tags")
+    home_button()
+    st.subheader("🔍 Search by Filter + Map + Tags")
     col1, col2 = st.columns(2)
     with col1:
         min_price = st.number_input("Min Price", 0)
     with col2:
         max_price = st.number_input("Max Price", 100000000)
-    location_input = st.text_input("Location (e.g., Sukhumvit, Pattaya)")
-    all_tags = sorted(set(tag.strip() for tags in df["facilities"].dropna().str.split(",") for tag in tags))
-    selected_tags = st.multiselect("\U0001F3F7 Tags (Facilities)", options=all_tags)
+
+    location_input = st.selectbox("Location", ["", "Sukhumvit", "Silom", "Sathorn", "Ari", "Rama 9"])
+
+    all_facility_tags = sorted(set(tag.strip() for tags in df["facilities"].dropna().str.split(",") for tag in tags))
+    selected_facility_tags = st.multiselect("🏷 Tags (Facilities)", options=all_facility_tags)
+
+    nearby_tag_options = [
+        "Hospital", "School", "Shopping Mall", "Park", "Public Transport",
+        "University", "Market", "Office Building", "Restaurant Hub", "Cultural Site"
+    ]
+    selected_nearby_tags = st.multiselect("📍 Nearby Places", options=nearby_tag_options)
+
     st.map(df[["latitude", "longitude"]].dropna(), zoom=6)
+
     if st.button("Search", key="filter_button"):
         results = df[
             (df["price"].astype(float) >= min_price) &
@@ -249,15 +311,22 @@ elif st.session_state.page == "Filter":
         ]
         if location_input:
             results = results[results["address"].str.contains(location_input, case=False, na=False)]
-        if selected_tags:
+        if selected_facility_tags:
             results = results[
                 results["facilities"].apply(
-                    lambda x: any(tag in x for tag in selected_tags) if pd.notna(x) else False
+                    lambda x: any(tag in x for tag in selected_facility_tags) if pd.notna(x) else False
+                )
+            ]
+        if selected_nearby_tags:
+            results = results[
+                results["magnet"].apply(
+                    lambda x: any(tag in x for tag in selected_nearby_tags) if pd.notna(x) else False
                 )
             ]
         st.session_state.search_results = results.to_dict(orient="records")
         st.session_state.previous_page = "Filter"
         st.rerun()
+
     if st.session_state.search_results:
         results_df = pd.DataFrame(st.session_state.search_results)
         st.write(f"### Found {len(results_df)} results:")
@@ -269,8 +338,14 @@ elif st.session_state.page == "Filter":
                 st.session_state.return_page = "Filter"
                 st.rerun()
 
+    if st.button("Clear Search and Return to Home", key="clear_filter"):
+        st.session_state.search_results = None
+        st.session_state.page = "Home"
+        st.rerun()
+
 elif st.session_state.page == "Style":
-    st.subheader("\U0001F3A8 Browse by House Style")
+    home_button()
+    st.subheader("🎨 Browse by House Style")
     styles = ["Select"] + sorted(df["style"].unique())
     selected_style = st.selectbox("Select a style:", styles)
     if selected_style != "Select":
@@ -284,3 +359,10 @@ elif st.session_state.page == "Style":
                 st.session_state.selected_house = row.to_dict()
                 st.session_state.return_page = "Style"
                 st.rerun()
+
+if st.session_state.page != "Home" and not st.session_state.selected_house:
+    st.markdown("---")
+    if st.button("🏠 Return to Home", key="global_home"):
+        st.session_state.page = "Home"
+        st.rerun()
+
